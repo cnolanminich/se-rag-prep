@@ -357,6 +357,7 @@ class GitHubDownloader:
             "https://github.com/slopp/snowreport",
             "https://github.com/slopp/dagteam",
             "https://github.com/slopp/dagster-dynamic-partitions"
+            "https://github.com/cnolanminich/testing-dynamic-fanout"
         ]
         
         results = {}
@@ -734,7 +735,7 @@ Generated: {time.strftime('%Y-%m-%d %H:%M:%S')}
         self.generate_report(repo_results, gist_results, flatten_results)
         
         print("\n🎉 Download process completed!")
-        print(f"📊 Results: {sum(repo_results.values())}/{len(repo_results)} repos, {sum(gist_results.values())}/{len(gist_results)} gists, {sum(flatten_results.values())}/{len(flatten_results)} flattened")
+        print(f"📊 Results: {sum(repo_results.values())}/{len(repo_results)} repos, {sum(gist_results.values())}/{len(gistResults)} gists, {sum(flattenResults.values())}/{len(flattenResults)} flattened")
 
 
 def main():
@@ -770,20 +771,46 @@ Environment Variables:
         help="Show what would be downloaded without actually downloading"
     )
     
+    parser.add_argument(
+        "--repo-url",
+        default=None,
+        help="Download and flatten only the specified GitHub repository URL (optional)"
+    )
+    
     args = parser.parse_args()
     
     if args.dry_run:
         print("🔍 DRY RUN MODE - No files will be downloaded")
         # TODO: Implement dry run functionality
         return
-    
+
     try:
         downloader = GitHubDownloader(
             output_dir=args.output_dir,
             github_token=args.token
         )
-        downloader.run()
-        
+        if args.repo_url:
+            print(f"🚀 Downloading single repository: {args.repo_url}")
+            repo_info = downloader.extract_repo_info(args.repo_url)
+            if not repo_info:
+                print(f"❌ Could not parse repo URL: {args.repo_url}")
+                sys.exit(1)
+            owner, repo = repo_info
+            target_dir = downloader.get_target_directory(owner, repo, args.repo_url)
+            success = downloader.clone_repository(args.repo_url, target_dir)
+            flatten_success = False
+            if success:
+                # Flatten to markdown
+                flattened_dir = downloader.output_dir / "flattened_repositories"
+                flattened_dir.mkdir(parents=True, exist_ok=True)
+                output_file = flattened_dir / f"single_{repo}.md"
+                flatten_success = downloader.flatten_repository_to_markdown(target_dir, output_file)
+            # Print summary
+            print("\n🎉 Single repo process completed!")
+            print(f"📊 Repo download: {'Success' if success else 'Failed'} | Flatten: {'Success' if flatten_success else 'Failed'}")
+        else:
+            downloader.run()
+
     except KeyboardInterrupt:
         print("\n⏹️  Download interrupted by user")
         sys.exit(1)
