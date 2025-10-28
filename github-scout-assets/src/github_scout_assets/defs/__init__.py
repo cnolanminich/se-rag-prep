@@ -1,0 +1,1 @@
+# Components are loaded via load_from_defs_folder

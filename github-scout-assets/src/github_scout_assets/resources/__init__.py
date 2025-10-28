@@ -1,0 +1,1 @@
+# Resources for GitHub Scout Assets

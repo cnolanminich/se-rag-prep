@@ -271,6 +271,27 @@ class GitHubDownloader:
             print(f"❌ Failed to download gist {gist_id}: {e}")
             return False
 
+    def extract_gist_id(self, gist_input: str) -> Optional[str]:
+        """Extract gist ID from GitHub gist URL or return the ID if already provided"""
+        try:
+            # If it's already a gist ID (32 hex chars), return it
+            if len(gist_input) == 32 and all(c in '0123456789abcdef' for c in gist_input.lower()):
+                return gist_input
+            
+            # Try to extract from URL
+            if 'gist.github.com' in gist_input:
+                parsed = urlparse(gist_input)
+                path_parts = parsed.path.strip("/").split("/")
+                # URL format: gist.github.com/username/gist_id
+                if len(path_parts) >= 2:
+                    return path_parts[-1]  # Last part should be the gist ID
+                elif len(path_parts) == 1:
+                    return path_parts[0]   # Just the gist ID
+            
+            return None
+        except Exception:
+            return None
+
     def extract_repo_info(self, url: str) -> Optional[Tuple[str, str]]:
         """Extract owner and repo name from GitHub URL"""
         try:
@@ -350,6 +371,7 @@ class GitHubDownloader:
             "https://github.com/cnolanminich/dagster_example_external_source",
             "https://github.com/cnolanminich/data-contracts-example",
             "https://github.com/cnolanminich/automation-condition-testing",
+            "https://github.com/cnolanminich/partition-custom-calendar",
             
             # User Examples - slopp  
             "https://github.com/slopp/freshness_guide",
@@ -400,6 +422,7 @@ class GitHubDownloader:
             ("554dc45ae164b36e6a0cfa08906a9af1", "Run Status Sensor - Wait for Two Jobs"),
             ("ab981bae677a75bcad15c352c3d42507", "Automation Conditions - Update Once Per Period"),
             ("8dd440c754f133113f2f668fbe92c6e9", "Dagster - Controlling Parallelism within a Run"),
+            ("bb1d8fd7738dbc6c4f1c320486a378fb", "Dagster -- Dagster+ High Velocity and Standard Credits Query")
         ]
         
         results = {}
@@ -747,6 +770,9 @@ Examples:
     python github_downloader.py
     python github_downloader.py --output-dir /path/to/downloads
     python github_downloader.py --token ghp_your_token_here
+    python github_downloader.py --repo-url https://github.com/user/repo
+    python github_downloader.py --gist-id abc123def456
+    python github_downloader.py --gist-id https://gist.github.com/user/abc123def456
     
 Environment Variables:
     GITHUB_TOKEN    GitHub personal access token for higher rate limits
@@ -775,6 +801,12 @@ Environment Variables:
         "--repo-url",
         default=None,
         help="Download and flatten only the specified GitHub repository URL (optional)"
+    )
+    
+    parser.add_argument(
+        "--gist-id",
+        default=None,
+        help="Download and flatten only the specified GitHub gist ID or URL (optional)"
     )
     
     args = parser.parse_args()
@@ -808,6 +840,28 @@ Environment Variables:
             # Print summary
             print("\n🎉 Single repo process completed!")
             print(f"📊 Repo download: {'Success' if success else 'Failed'} | Flatten: {'Success' if flatten_success else 'Failed'}")
+        elif args.gist_id:
+            print(f"🚀 Downloading single gist: {args.gist_id}")
+            gist_id = downloader.extract_gist_id(args.gist_id)
+            if not gist_id:
+                print(f"❌ Could not parse gist ID from: {args.gist_id}")
+                sys.exit(1)
+            gist_dir = downloader.output_dir / "gists"
+            success = downloader.download_gist(gist_id, gist_dir, "Single Gist Download")
+            flatten_success = False
+            if success:
+                # Find the downloaded gist directory
+                gist_directories = list(gist_dir.glob(f"*_{gist_id}"))
+                if gist_directories:
+                    gist_path = gist_directories[0]
+                    # Flatten to markdown
+                    flattened_dir = downloader.output_dir / "flattened_repositories"
+                    flattened_dir.mkdir(parents=True, exist_ok=True)
+                    output_file = flattened_dir / f"single_gist_{gist_id}.md"
+                    flatten_success = downloader.flatten_repository_to_markdown(gist_path, output_file)
+            # Print summary
+            print("\n🎉 Single gist process completed!")
+            print(f"📊 Gist download: {'Success' if success else 'Failed'} | Flatten: {'Success' if flatten_success else 'Failed'}")
         else:
             downloader.run()
 
